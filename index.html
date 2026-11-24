@@ -575,7 +575,7 @@ function syncPill(){const p=$('#pill');if(!S)return;const n=pendCount(),on=navig
   if(!CL.user&&!S.uid){p.className='pill off';p.textContent='লগইন নেই';return}
   if(CL.err&&CL.err!=='nosdk'&&on){p.className='pill off';p.textContent='সিঙ্কে সমস্যা';return}
   p.className='pill '+(!on||CL.err==='nosdk'?'off':n?'wait':'ok');p.textContent=!on||CL.err==='nosdk'?'অফলাইন'+(n?' · '+nf(n,0)+' বাকি':''):n?nf(n,0)+' টি সিঙ্ক বাকি':'সব সিঙ্কড'}
-function render(){const V={home:vHome,list:vList,price:vPrice,report:vReport,set:vSet,loan:vLoan,shop:vShop};$('#view').innerHTML=V[view]();if(view==='list')listBody();
+function render(){navTrack();const V={home:vHome,list:vList,price:vPrice,report:vReport,set:vSet,loan:vLoan,shop:vShop};$('#view').innerHTML=V[view]();if(view==='list')listBody();
   $('#hTitle').textContent=I18[L()][view];$('#hSub').textContent=now.toLocaleDateString(loc(),{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));document.querySelectorAll('[data-i]').forEach(e=>e.textContent=I18[L()][e.dataset.i].split(' ')[0]);
   document.documentElement.lang=L();syncPill();drawAll()}
@@ -731,6 +731,36 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('#pv').hidden
 addEventListener('online',()=>{if(!CL.ready)startCloud();syncPill();toast('ইন্টারনেট ফিরে এসেছে — সিঙ্ক করা যাবে')});addEventListener('offline',()=>{syncPill();toast('অফলাইন — সব পরিবর্তন ফোনেই জমা থাকবে')});
 
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&S)persist()});addEventListener('pagehide',()=>{if(S)persist()});
+/* ফোনের ব্যাক বাটন: প্রতিটা স্ক্রিন বা পপআপ খুললে history-তে একটা ধাপ যোগ হয়; ব্যাক চাপলে উপরের ধাপটা বন্ধ হয়ে আগের স্ক্রিনে ফেরে;
+   হোমে কিছু খোলা না থাকলে প্রথম ব্যাকে সতর্কবার্তা, দ্বিতীয় ব্যাকে অ্যাপ থেকে বের হওয়া।
+   history-র ধাপগুলোতে শুধু গভীরতা (hk) থাকে: ০ = বেস, ১ = হোম-গার্ড, তার উপরে প্রতিটা খোলা স্ক্রিন/পপআপ।
+   (এই কোডে history() নামে দামের-ইতিহাস ফাংশন আছে, তাই ব্রাউজারের history = WH) */
+var NAV={st:[],view:'home',expect:null,wait:0};
+const WH=window.history;
+const NAVOV=[['#sheetOv',()=>closeSheet()],['#modal',()=>{$('#modal').hidden=true}],['#pv',()=>{$('#pv').hidden=true}]];
+function navDepth(){return 1+NAV.st.length}
+function navHk(){const s=WH.state;return s&&typeof s.hk==='number'?s.hk:0}
+function navGuard(){if(NAV.expect==null&&navHk()<1)WH.pushState({hk:1},'')}
+function navPush(l){NAV.st.push(l);if(NAV.expect!=null){NAV.wait++;return}navGuard();WH.pushState({hk:navDepth()},'')}
+/* কোড থেকে বন্ধ হওয়া ধাপগুলো সরাও (বোতাম, সেভ, Escape ইত্যাদি) — history থেকেও ততগুলো ধাপ পিছিয়ে যাও */
+function navDrop(test){let n=0;for(let i=NAV.st.length-1;i>=0;i--){if(!test(NAV.st[i]))continue;const unpushed=i>=NAV.st.length-NAV.wait;NAV.st.splice(i,1);if(unpushed)NAV.wait--;else n++}
+  if(!n)return;NAV.expect=(NAV.expect!=null?NAV.expect:navHk())-n;WH.go(-n)}
+function navSync(){navDrop(l=>l.el&&l.el.hidden);NAVOV.forEach(([sel,close])=>{const el=$(sel);if(!el.hidden&&!NAV.st.some(l=>l.el===el))navPush({el,close})})}
+function navTrack(){if(!NAV||NAV.view===view)return;const prev=NAV.view;NAV.view=view;
+  if(view==='home')return navDrop(l=>!l.el);
+  navPush({prev,close:()=>{view=prev;NAV.view=prev;window.scrollTo(0,0);render()}})}
+addEventListener('popstate',e=>{const d=e.state&&typeof e.state.hk==='number'?e.state.hk:0;
+  if(NAV.expect!=null){if(d>NAV.expect)return;const mine=d===NAV.expect;NAV.expect=null;const w=NAV.wait;NAV.wait=0;
+    if(mine){for(let i=w;i>0;i--)WH.pushState({hk:navDepth()-i+1},'');return}}
+  let popped=false;while(navDepth()>Math.max(d,1)){const l=NAV.st.pop();popped=true;l.close()}
+  if(d>0)return;
+  if(popped)return WH.pushState({hk:1},'');
+  toast(L()==='en'?'Press back again to exit':'বের হতে আবার ব্যাক চাপুন',2000)});
+/* প্রথম ব্যাকের পর ব্যবহারকারী আবার কিছু চাপলে হোম-গার্ড ফেরত আসে */
+addEventListener('click',navGuard,true);addEventListener('keydown',navGuard,true);
+NAVOV.forEach(([sel])=>new MutationObserver(navSync).observe($(sel),{attributes:true,attributeFilter:['hidden']}));
+WH.replaceState({hk:0},'');WH.pushState({hk:1},'');
+
 (async()=>{await load();buildIdx();theme();render();if(!S.uid)showAuth('');else if(S.settings.pin)$('#lock').hidden=false;persist();startCloud();
   try{if(navigator.storage&&navigator.storage.persist)persisted=(await navigator.storage.persisted())||(await navigator.storage.persist())}catch(e){}
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});

@@ -1,6 +1,6 @@
 /* হিসাব খাতা — অফলাইন সার্ভিস ওয়ার্কার।
    অ্যাপ আপডেট করলে নিচের VERSION সংখ্যা বদলাবেন (যেমন v2), তাহলে ফোনে নতুন সংস্করণ আসবে। */
-const VERSION = 'hisab-v2';
+const VERSION = 'hisab-v3';
 const APP = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
